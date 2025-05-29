@@ -117,8 +117,9 @@
     </div>
     <button type="submit" id="guardarBtn">Guardar</button>
     <button type="button" id="resetBtn" style="margin-top:12px;background:#e0e0e0;color:#007BFF;font-weight:600;">Reset</button>
+    <button type="button" id="historialBtn" style="margin:18px 0 0 0;background:#fff;color:#007BFF;font-weight:700;border:2px solid #007BFF;">Historial</button>
   </form>
-  <div id="tabla-container"></div>
+  <div id="tabla-container" style="display:none;"></div>
   <script>
     // Configuración de Firebase
     const firebaseConfig = {
@@ -190,55 +191,32 @@
 
 // Mostrar SOLO los últimos 10 registros guardados en tabla
   function cargarTabla() {
-    database.ref("inventario")
-      .orderByChild("fecha")
-      .limitToLast(10)
-      .once("value")
-      .then(snapshot => {
-        let registros = [];
-        snapshot.forEach(child => {
-          const data = child.val();
-          registros.push({
-            key: child.key,
-            ...data
-          });
-        });
-        // Ordenar descendente (más reciente primero)
-        registros.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
-
-        let html = `
-        <table>
+    database.ref("inventario").limitToLast(10).once("value", snapshot => {
+      let html = `<table>
+        <thead>
           <tr>
             <th>Artículo</th>
-            <th>Cod</th>
-            <th>Cantidad</th>
+            <th>Cant</th>
             <th>Tipo</th>
-            <th>Fecha</th>
             <th>Acciones</th>
           </tr>
-        `;
-        if (registros.length === 0) {
-          html += "<tr><td colspan='6' style='text-align:center'>Sin registros</td></tr>";
-        } else {
-          registros.forEach(data => {
-            html += `
-              <tr>
-                <td>${data.articulo || ""}</td>
-                <td>${data.cod_art || ""}</td>
-                <td>${data.stock || ""}</td>
-                <td>${data.tipo || ""}</td>
-                <td>${data.fecha ? data.fecha.substr(0, 16).replace('T', ' ') : ""}</td>
-                <td>
-                  <button class="edit" onclick="editarRegistro('${data.key}')">Editar</button>
-                  <button class="delete" onclick="borrarRegistro('${data.key}')">Borrar</button>
-                </td>
-              </tr>
-            `;
-          });
-        }
-        html += "</table>";
-        tablaContainer.innerHTML = html;
+        </thead>
+        <tbody>`;
+      snapshot.forEach(child => {
+        const data = child.val();
+        html += `<tr>
+          <td>${data.articulo || ""}</td>
+          <td>${data.stock || ""}</td>
+          <td>${data.tipo || ""}</td>
+          <td>
+            <button class="edit" onclick="editarRegistro('${child.key}')">Editar</button>
+            <button class="delete" onclick="borrarRegistro('${child.key}')">Borrar</button>
+          </td>
+        </tr>`;
       });
+      html += `</tbody></table>`;
+      document.getElementById("tabla-container").innerHTML = html;
+    });
   }
     // Exponer funciones para los botones (porque están en HTML)
     window.editarRegistro = function(id) {
@@ -314,12 +292,16 @@
       editandoId = null;
     });
 
-    // Siempre INGRESO al iniciar
-    window.addEventListener('DOMContentLoaded', () => {
-      tipoCheck.checked = false;
-      actualizarTipoLabel();
-      cargarTabla();
-    });
+    // Elimina o comenta esta línea para que la tabla NO se cargue automáticamente
+    // window.addEventListener('DOMContentLoaded', () => {
+    //   cargarTabla();
+    // });
+
+    document.getElementById("historialBtn").addEventListener("click", function() {
+  document.getElementById("tabla-container").style.display = "block";
+  cargarTabla();
+});
+
     $(document).ready(function() {
   $('#articulo').select2({
     placeholder: "Seleccione artículo",
