@@ -3,10 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Formulario de Inventario</title>
+  <title>Inventario</title>
   <!-- Firebase SDKs en modo compat -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -101,8 +104,10 @@
 <body>
   <form id="formulario">
     <h2>Inventario</h2>
-    <input list="lista-articulos" id="articulo" placeholder="Artículo" required />
-    <datalist id="lista-articulos"></datalist>
+    <select id="articulo" style="width:100%;" required>
+      <option value="" disabled selected>Seleccione artículo</option>
+    </select>
+    <div> <br></div>
     <input type="text" id="cod" placeholder="Cod" required readonly />
     <input type="number" id="stock" placeholder="Cantidad" required />
     <div class="tipo-row">
@@ -130,7 +135,6 @@
     const inputArticulo = document.getElementById("articulo");
     const inputCod = document.getElementById("cod");
     const inputStock = document.getElementById("stock");
-    const datalist = document.getElementById("lista-articulos");
     const tipoCheck = document.getElementById("tipoCheck");
     const tipoLabel = document.getElementById("tipo-label");
     const tablaContainer = document.getElementById("tabla-container");
@@ -148,8 +152,10 @@
 
     // Cargar y escuchar 'articulos' en tiempo real
     database.ref("articulos").on("value", snapshot => {
-      datalist.innerHTML = "";
+      const select = document.getElementById("articulo");
       articulosCache = {};
+      // Limpia las opciones excepto la primera
+      select.innerHTML = `<option value="" disabled selected>Seleccione artículo</option>`;
 
       if (!snapshot.exists()) return;
 
@@ -159,24 +165,25 @@
         if (articulo && !articulosCache[articulo]) {
           const option = document.createElement("option");
           option.value = articulo;
-          datalist.appendChild(option);
+          option.textContent = articulo;
+          select.appendChild(option);
           articulosCache[articulo] = {
             cod_art: data.cod_art || "",
             stock: data.stock || ""
           };
         }
       });
+      // Refresca Select2
+      $('#articulo').trigger('change.select2');
     });
 
     // Autocompletar al elegir un artículo
-    inputArticulo.addEventListener("input", () => {
-      const info = articulosCache[inputArticulo.value.trim()];
+    $('#articulo').on('change', function() {
+      const info = articulosCache[$(this).val()];
       if (info) {
         inputCod.value = info.cod_art;
-      
       } else {
         inputCod.value = "";
-
       }
     });
 
@@ -237,14 +244,15 @@
       database.ref('inventario/' + id).once('value').then(snap => {
         const data = snap.val();
         if (!data) return;
-        inputArticulo.value = data.articulo || "";
+        // Cambia el valor y actualiza Select2
+        $('#articulo').val(data.articulo).trigger('change');
         inputCod.value = data.cod_art || "";
         inputStock.value = data.stock || "";
         tipoCheck.checked = (data.tipo === "EGRESO");
         actualizarTipoLabel();
         editandoId = id;
         guardarBtn.textContent = "Actualizar";
-        inputArticulo.focus();
+        $('#articulo').select2('open'); // Opcional: abre el selector al editar
       });
     };
     window.borrarRegistro = function(id) {
@@ -305,6 +313,12 @@
       actualizarTipoLabel();
       cargarTabla();
     });
+    $(document).ready(function() {
+  $('#articulo').select2({
+    placeholder: "Seleccione artículo",
+    width: 'resolve'
+  });
+});
   </script>
 </body>
 </html>
