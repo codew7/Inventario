@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Formulario de Inventario</title>
+  <!-- Firebase SDKs en modo compat -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f2f2f2;
+      padding: 40px;
+    }
+    form {
+      background: #fff;
+      padding: 25px;
+      max-width: 400px;
+      margin: auto;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      border-radius: 8px;
+    }
+    input, textarea {
+      width: 95%;
+      padding: 10px;
+      margin-bottom: 15px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-size: 16px;
+    }
+    button {
+      width: 100%;
+      background-color: #007BFF;
+      color: white;
+      padding: 10px;
+      font-size: 16px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .tipo-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    #tipo-label {
+      min-width: 70px;
+      font-size: 16px;
+      font-weight: bold;
+    }
+    table {
+      width: 100%;
+      max-width: 600px;
+      margin: 32px auto 0;
+      border-collapse: collapse;
+      background: #fff;
+      box-shadow: 0 0 10px rgba(0,0,0,0.08);
+      border-radius: 8px;
+      overflow: hidden;
+      font-size: 12px;
+    }
+    th, td {
+      border: 1px solid #eee;
+      padding: 8px 6px;
+      text-align: left;
+    }
+    th {
+      background: #eaf1fb;
+      font-weight: bold;
+    }
+    td button {
+      width: auto;
+      padding: 6px 12px;
+      font-size: 14px;
+      margin: 0 2px;
+      border-radius: 5px;
+      border: none;
+      background: #007BFF;
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    td button.delete {
+      background: #e23b3b;
+    }
+    td button.edit {
+      background: #ffa000;
+    }
+    td button.delete:hover {
+      background: #a10000;
+    }
+    td button.edit:hover {
+      background: #d98200;
+    }
+  </style>
+</head>
+<body>
+  <form id="formulario">
+    <h2>Inventario</h2>
+    <input list="lista-articulos" id="articulo" placeholder="Artículo" required />
+    <datalist id="lista-articulos"></datalist>
+    <input type="text" id="cod" placeholder="Cod" required readonly />
+    <input type="number" id="stock" placeholder="Cantidad" required />
+    <div class="tipo-row">
+      <span id="tipo-label">INGRESO</span>
+      <input type="checkbox" id="tipoCheck" style="width:auto;margin:0;" />
+      <label for="tipoCheck" style="user-select:none;cursor:pointer;"></label>
+    </div>
+    <button type="submit" id="guardarBtn">Guardar</button>
+  </form>
+  <div id="tabla-container"></div>
+  <script>
+    // Configuración de Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyAWqa1dFGpgRq5aptnmZSClP6vnXmYU9DY",
+      authDomain: "inventario-88b03.firebaseapp.com",
+      databaseURL: "https://inventario-88b03-default-rtdb.firebaseio.com",
+      projectId: "inventario-88b03",
+      storageBucket: "inventario-88b03.appspot.com",
+      messagingSenderId: "999456570517",
+      appId: "1:999456570517:web:a98ab07485a5cde4cf2f9c"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+
+    const inputArticulo = document.getElementById("articulo");
+    const inputCod = document.getElementById("cod");
+    const inputStock = document.getElementById("stock");
+    const datalist = document.getElementById("lista-articulos");
+    const tipoCheck = document.getElementById("tipoCheck");
+    const tipoLabel = document.getElementById("tipo-label");
+    const tablaContainer = document.getElementById("tabla-container");
+    const guardarBtn = document.getElementById("guardarBtn");
+
+    let articulosCache = {};
+    let editandoId = null; // Si no es null, estamos editando
+
+    // Cambiar texto INGRESO/EGRESO según el check
+    function actualizarTipoLabel() {
+      tipoLabel.textContent = tipoCheck.checked ? "EGRESO" : "INGRESO";
+    }
+    tipoCheck.addEventListener("change", actualizarTipoLabel);
+    actualizarTipoLabel();
+
+    // Cargar y escuchar 'articulos' en tiempo real
+    database.ref("articulos").on("value", snapshot => {
+      datalist.innerHTML = "";
+      articulosCache = {};
+
+      if (!snapshot.exists()) return;
+
+      snapshot.forEach(child => {
+        const data = child.val();
+        const articulo = data.articulo?.trim();
+        if (articulo && !articulosCache[articulo]) {
+          const option = document.createElement("option");
+          option.value = articulo;
+          datalist.appendChild(option);
+          articulosCache[articulo] = {
+            cod_art: data.cod_art || "",
+            stock: data.stock || ""
+          };
+        }
+      });
+    });
+
+    // Autocompletar al elegir un artículo
+    inputArticulo.addEventListener("input", () => {
+      const info = articulosCache[inputArticulo.value.trim()];
+      if (info) {
+        inputCod.value = info.cod_art;
+      
+      } else {
+        inputCod.value = "";
+
+      }
+    });
+
+// Mostrar SOLO los últimos 10 registros guardados en tabla
+  function cargarTabla() {
+    database.ref("inventario")
+      .orderByChild("fecha")
+      .limitToLast(10)
+      .once("value")
+      .then(snapshot => {
+        let registros = [];
+        snapshot.forEach(child => {
+          const data = child.val();
+          registros.push({
+            key: child.key,
+            ...data
+          });
+        });
+        // Ordenar descendente (más reciente primero)
+        registros.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+
+        let html = `
+        <table>
+          <tr>
+            <th>Artículo</th>
+            <th>Cod</th>
+            <th>Cantidad</th>
+            <th>Tipo</th>
+            <th>Fecha</th>
+            <th>Acciones</th>
+          </tr>
+        `;
+        if (registros.length === 0) {
+          html += "<tr><td colspan='6' style='text-align:center'>Sin registros</td></tr>";
+        } else {
+          registros.forEach(data => {
+            html += `
+              <tr>
+                <td>${data.articulo || ""}</td>
+                <td>${data.cod_art || ""}</td>
+                <td>${data.stock || ""}</td>
+                <td>${data.tipo || ""}</td>
+                <td>${data.fecha ? data.fecha.substr(0, 16).replace('T', ' ') : ""}</td>
+                <td>
+                  <button class="edit" onclick="editarRegistro('${data.key}')">Editar</button>
+                  <button class="delete" onclick="borrarRegistro('${data.key}')">Borrar</button>
+                </td>
+              </tr>
+            `;
+          });
+        }
+        html += "</table>";
+        tablaContainer.innerHTML = html;
+      });
+  }
+    // Exponer funciones para los botones (porque están en HTML)
+    window.editarRegistro = function(id) {
+      database.ref('inventario/' + id).once('value').then(snap => {
+        const data = snap.val();
+        if (!data) return;
+        inputArticulo.value = data.articulo || "";
+        inputCod.value = data.cod_art || "";
+        inputStock.value = data.stock || "";
+        tipoCheck.checked = (data.tipo === "EGRESO");
+        actualizarTipoLabel();
+        editandoId = id;
+        guardarBtn.textContent = "Actualizar";
+        inputArticulo.focus();
+      });
+    };
+    window.borrarRegistro = function(id) {
+      if (confirm("¿Seguro que querés borrar este registro?")) {
+        database.ref('inventario/' + id).remove().then(cargarTabla);
+      }
+    };
+
+    // Manejo del formulario (Guardar y Actualizar)
+    document.getElementById("formulario").addEventListener("submit", function (e) {
+      e.preventDefault();
+
+      const articulo = inputArticulo.value.trim();
+      const cod_art = inputCod.value.trim();
+      const stock = parseInt(inputStock.value);
+      const tipo = tipoCheck.checked ? "EGRESO" : "INGRESO";
+
+      if (!articulo || !cod_art || isNaN(stock)) {
+        alert("Completá todos los campos obligatorios.");
+        return;
+      }
+      let ref, accion;
+      if (editandoId) {
+        ref = database.ref("inventario/" + editandoId);
+        accion = ref.set({
+          fecha: new Date().toISOString(),
+          tipo: tipo,
+          cod_art: cod_art,
+          articulo: articulo,
+          stock: stock,
+        });
+      } else {
+        ref = database.ref("inventario").push();
+        accion = ref.set({
+          fecha: new Date().toISOString(),
+          tipo: tipo,
+          cod_art: cod_art,
+          articulo: articulo,
+          stock: stock,
+        });
+      }
+      accion.then(() => {
+        alert(editandoId ? "✅ Registro actualizado." : "✅ Producto guardado con éxito.");
+        document.getElementById("formulario").reset();
+        tipoCheck.checked = false;
+        actualizarTipoLabel();
+        editandoId = null;
+        guardarBtn.textContent = "Guardar";
+        cargarTabla();
+      }).catch((error) => {
+        alert("❌ Error al guardar: " + error.message);
+      });
+    });
+
+    // Siempre INGRESO al iniciar
+    window.addEventListener('DOMContentLoaded', () => {
+      tipoCheck.checked = false;
+      actualizarTipoLabel();
+      cargarTabla();
+    });
+  </script>
+</body>
+</html>
