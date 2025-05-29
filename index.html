@@ -57,7 +57,7 @@
       font-weight: bold;
     }
     table {
-      width: auto;
+      width: 95%;
       margin: 32px auto 0;
       border-collapse: collapse;
       background: #fff;
@@ -116,6 +116,7 @@
       <label for="tipoCheck" style="user-select:none;cursor:pointer;"></label>
     </div>
     <button type="submit" id="guardarBtn">Guardar</button>
+    <button type="button" id="resetBtn" style="margin-top:12px;background:#e0e0e0;color:#007BFF;font-weight:600;">Reset</button>
   </form>
   <div id="tabla-container"></div>
   <script>
@@ -244,15 +245,14 @@
       database.ref('inventario/' + id).once('value').then(snap => {
         const data = snap.val();
         if (!data) return;
-        // Cambia el valor y actualiza Select2
         $('#articulo').val(data.articulo).trigger('change');
+        $('#articulo').prop('disabled', true); // Deshabilita el select
         inputCod.value = data.cod_art || "";
         inputStock.value = data.stock || "";
         tipoCheck.checked = (data.tipo === "EGRESO");
         actualizarTipoLabel();
         editandoId = id;
         guardarBtn.textContent = "Actualizar";
-        $('#articulo').select2('open'); // Opcional: abre el selector al editar
       });
     };
     window.borrarRegistro = function(id) {
@@ -305,6 +305,13 @@
       }).catch((error) => {
         alert("❌ Error al guardar: " + error.message);
       });
+      $('#articulo').prop('disabled', false); // Habilita el select después de guardar
+      // ...restablece el formulario y variables...
+      this.reset();
+      $('#articulo').val('').trigger('change');
+      inputCod.value = "";
+      guardarBtn.textContent = "Guardar";
+      editandoId = null;
     });
 
     // Siempre INGRESO al iniciar
@@ -318,6 +325,15 @@
     placeholder: "Seleccione artículo",
     width: 'resolve'
   });
+});
+document.getElementById("resetBtn").addEventListener("click", function() {
+  document.getElementById("formulario").reset();
+  $('#articulo').val('').trigger('change');
+  inputCod.value = "";
+  $('#articulo').prop('disabled', false);
+  guardarBtn.textContent = "Guardar";
+  editandoId = null;
+  actualizarTipoLabel();
 });
   </script>
 </body>
