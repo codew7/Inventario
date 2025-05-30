@@ -98,21 +98,48 @@
     td button.edit:hover {
       background: #d98200;
     }
+    .campo-form,
+    .select2-container--default .select2-selection--single {
+      width: 90%;
+      height: 44px !important;
+      min-height: 44px !important;
+      padding: 10px 12px !important;
+      font-size: 16px;
+      box-sizing: border-box;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+    }
+    .select2-container--default .select2-selection--single {
+      padding: 0 12px !important;
+      display: flex;
+      align-items: center;
+    }
+    .campo-form {
+      margin-bottom: 15px;
+    }
   </style>
 </head>
 <body>
   <form id="formulario">
     <h2>Inventario</h2>
-    <select id="articulo" style="width:100%;" required>
+    <select id="articulo" class="campo-form" style="width:100%;" required>
       <option value="" disabled selected>Seleccione artículo</option>
     </select>
     <div> <br></div>
-    <input type="text" id="cod" placeholder="Cod" required readonly />
-    <input type="number" id="stock" placeholder="Cantidad" required />
+    <input type="text" id="cod" class="campo-form" placeholder="Cod" required readonly style="display:none;" />
+    <input type="number" id="stock" class="campo-form" placeholder="Cantidad" required />
     <div class="tipo-row">
       <span id="tipo-label">INGRESO</span>
       <input type="checkbox" id="tipoCheck" style="width:auto;margin:0;" />
       <label for="tipoCheck" style="user-select:none;cursor:pointer;"></label>
+      <select id="nota" class="campo-form" style="width:100%;">
+        <option value="" selected disabled hidden></option>
+        <option value="Ale">Ale</option>
+        <option value="Javi">Javi</option>
+        <option value="Sabri">Sabri</option>
+        <option value="Ajuste">Ajuste</option>
+      </select>
     </div>
     <button type="submit" id="guardarBtn">Guardar</button>
     <button type="button" id="resetBtn" style="margin-top:12px;background:#e0e0e0;color:#007BFF;font-weight:600;">Reset</button>
@@ -232,6 +259,7 @@
       inputCod.value = data.cod_art || "";
       inputStock.value = data.stock || "";
       tipoCheck.checked = (data.tipo === "EGRESO");
+      document.getElementById("nota").value = data.nota || "";
       actualizarTipoLabel();
       editandoId = id;
       guardarBtn.textContent = "Actualizar";
@@ -253,6 +281,7 @@
       const cod_art = inputCod.value.trim();
       const stock = parseInt(inputStock.value);
       const tipo = tipoCheck.checked ? "EGRESO" : "INGRESO";
+      const nota = document.getElementById("nota").value;
 
       if (!articulo || !cod_art || isNaN(stock)) {
         alert("Completá todos los campos obligatorios.");
@@ -265,7 +294,7 @@
           .from('inventario')
           .update({
             fecha: new Date().toISOString(),
-            tipo, cod_art, articulo, stock
+            tipo, cod_art, articulo, stock, nota
           })
           .eq('id', editandoId);
       } else {
@@ -273,7 +302,7 @@
           .from('inventario')
           .insert([{
             fecha: new Date().toISOString(),
-            tipo, cod_art, articulo, stock
+            tipo, cod_art, articulo, stock, nota
           }]);
       }
 
@@ -291,6 +320,7 @@
       $('#articulo').prop('disabled', false);
       this.reset();
       $('#articulo').val('').trigger('change');
+      $('#nota').val('').trigger('change');
       inputCod.value = "";
       guardarBtn.textContent = "Guardar";
       editandoId = null;
@@ -306,6 +336,7 @@
     document.getElementById("resetBtn").addEventListener("click", function() {
       document.getElementById("formulario").reset();
       $('#articulo').val('').trigger('change');
+      $('#nota').val('').trigger('change'); // <-- Añade esta línea
       inputCod.value = "";
       $('#articulo').prop('disabled', false);
       guardarBtn.textContent = "Guardar";
@@ -318,6 +349,10 @@
       await cargarArticulos();
       $('#articulo').select2({
         placeholder: "Seleccione artículo",
+        width: 'resolve'
+      });
+      $('#nota').select2({
+        placeholder: "Nota",
         width: 'resolve'
       });
     });
