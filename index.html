@@ -4,9 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Inventario</title>
-  <!-- Firebase SDKs en modo compat -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+  <!-- Supabase SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
@@ -121,19 +120,12 @@
   </form>
   <div id="tabla-container" style="display:none;"></div>
   <script>
-    // Configuración de Firebase
-    const firebaseConfig = {
-      apiKey: "AIzaSyAWqa1dFGpgRq5aptnmZSClP6vnXmYU9DY",
-      authDomain: "inventario-88b03.firebaseapp.com",
-      databaseURL: "https://inventario-88b03-default-rtdb.firebaseio.com",
-      projectId: "inventario-88b03",
-      storageBucket: "inventario-88b03.appspot.com",
-      messagingSenderId: "999456570517",
-      appId: "1:999456570517:web:a98ab07485a5cde4cf2f9c"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const database = firebase.database();
+    // ----- CONFIGURÁ ACÁ TUS CLAVES SUPABASE -----
+    const SUPABASE_URL = "https://zzbmnuhwpdlcxqkesfhd.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6Ym1udWh3cGRsY3hxa2VzZmhkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg1NjY4MjcsImV4cCI6MjA2NDE0MjgyN30.kuZJhHDGXkGxtgbIrfDBeLhX2SiIGfxGC6Mztc6qHcA";
+    const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+    // ---- VARIABLES DOM ----
     const inputArticulo = document.getElementById("articulo");
     const inputCod = document.getElementById("cod");
     const inputStock = document.getElementById("stock");
@@ -141,45 +133,47 @@
     const tipoLabel = document.getElementById("tipo-label");
     const tablaContainer = document.getElementById("tabla-container");
     const guardarBtn = document.getElementById("guardarBtn");
-
     let articulosCache = {};
-    let editandoId = null; // Si no es null, estamos editando
+    let editandoId = null;
 
-    // Cambiar texto INGRESO/EGRESO según el check
+    // ---- CAMBIO INGRESO / EGRESO ----
     function actualizarTipoLabel() {
       tipoLabel.textContent = tipoCheck.checked ? "EGRESO" : "INGRESO";
     }
     tipoCheck.addEventListener("change", actualizarTipoLabel);
     actualizarTipoLabel();
 
-    // Cargar y escuchar 'articulos' en tiempo real
-    database.ref("articulos").on("value", snapshot => {
-      const select = document.getElementById("articulo");
+    // ---- CARGAR ARTÍCULOS DESDE SUPABASE ----
+    async function cargarArticulos() {
+      const { data, error } = await supa
+        .from('articulos')
+        .select('articulo, cod_art')
+        .order('articulo', { ascending: true });
+
+      console.log("Supabase data:", data);
+      console.log("Supabase error:", error);
+
       articulosCache = {};
-      // Limpia las opciones excepto la primera
+      const select = document.getElementById("articulo");
       select.innerHTML = `<option value="" disabled selected>Seleccione artículo</option>`;
+      if (data) {
+        data.forEach(item => {
+          if (item.articulo && !articulosCache[item.articulo]) {
+            const option = document.createElement("option");
+            option.value = item.articulo;
+            option.textContent = item.articulo;
+            select.appendChild(option);
+            articulosCache[item.articulo] = {
+              cod_art: item.cod_art || ""
+            };
+          }
+        });
+        $('#articulo').trigger('change.select2');
+      }
+    }
 
-      if (!snapshot.exists()) return;
 
-      snapshot.forEach(child => {
-        const data = child.val();
-        const articulo = data.articulo?.trim();
-        if (articulo && !articulosCache[articulo]) {
-          const option = document.createElement("option");
-          option.value = articulo;
-          option.textContent = articulo;
-          select.appendChild(option);
-          articulosCache[articulo] = {
-            cod_art: data.cod_art || "",
-            stock: data.stock || ""
-          };
-        }
-      });
-      // Refresca Select2
-      $('#articulo').trigger('change.select2');
-    });
-
-    // Autocompletar al elegir un artículo
+    // ---- AUTOCOMPLETAR CÓDIGO AL ELEGIR ARTÍCULO ----
     $('#articulo').on('change', function() {
       const info = articulosCache[$(this).val()];
       if (info) {
@@ -189,9 +183,15 @@
       }
     });
 
-// Mostrar SOLO los últimos 10 registros guardados en tabla
-  function cargarTabla() {
-    database.ref("inventario").limitToLast(10).once("value", snapshot => {
+
+    // ---- CARGAR ÚLTIMOS 10 REGISTROS ----
+    async function cargarTabla() {
+      const { data, error } = await supa
+        .from('inventario')
+        .select('*')
+        .order('fecha', { ascending: false })
+        .limit(10);
+
       let html = `<table>
         <thead>
           <tr>
@@ -202,45 +202,51 @@
           </tr>
         </thead>
         <tbody>`;
-      snapshot.forEach(child => {
-        const data = child.val();
-        html += `<tr>
-          <td>${data.articulo || ""}</td>
-          <td>${data.stock || ""}</td>
-          <td>${data.tipo || ""}</td>
-          <td>
-            <button class="edit" onclick="editarRegistro('${child.key}')">Editar</button>
-            <button class="delete" onclick="borrarRegistro('${child.key}')">Borrar</button>
-          </td>
-        </tr>`;
-      });
+      if (data) {
+        data.forEach(item => {
+          html += `<tr>
+            <td>${item.articulo || ""}</td>
+            <td>${item.stock || ""}</td>
+            <td>${item.tipo || ""}</td>
+            <td>
+              <button class="edit" onclick="editarRegistro(${item.id})">Editar</button>
+              <button class="delete" onclick="borrarRegistro(${item.id})">Borrar</button>
+            </td>
+          </tr>`;
+        });
+      }
       html += `</tbody></table>`;
       document.getElementById("tabla-container").innerHTML = html;
-    });
-  }
-    // Exponer funciones para los botones (porque están en HTML)
-    window.editarRegistro = function(id) {
-      database.ref('inventario/' + id).once('value').then(snap => {
-        const data = snap.val();
-        if (!data) return;
-        $('#articulo').val(data.articulo).trigger('change');
-        $('#articulo').prop('disabled', true); // Deshabilita el select
-        inputCod.value = data.cod_art || "";
-        inputStock.value = data.stock || "";
-        tipoCheck.checked = (data.tipo === "EGRESO");
-        actualizarTipoLabel();
-        editandoId = id;
-        guardarBtn.textContent = "Actualizar";
-      });
+    }
+
+    // ---- EDITAR REGISTRO ----
+    window.editarRegistro = async function(id) {
+      const { data, error } = await supa
+        .from('inventario')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (!data) return;
+      $('#articulo').val(data.articulo).trigger('change');
+      $('#articulo').prop('disabled', true);
+      inputCod.value = data.cod_art || "";
+      inputStock.value = data.stock || "";
+      tipoCheck.checked = (data.tipo === "EGRESO");
+      actualizarTipoLabel();
+      editandoId = id;
+      guardarBtn.textContent = "Actualizar";
     };
-    window.borrarRegistro = function(id) {
+
+    // ---- BORRAR REGISTRO ----
+    window.borrarRegistro = async function(id) {
       if (confirm("¿Seguro que querés borrar este registro?")) {
-        database.ref('inventario/' + id).remove().then(cargarTabla);
+        await supa.from('inventario').delete().eq('id', id);
+        cargarTabla();
       }
     };
 
-    // Manejo del formulario (Guardar y Actualizar)
-    document.getElementById("formulario").addEventListener("submit", function (e) {
+    // ---- GUARDAR / ACTUALIZAR REGISTRO ----
+    document.getElementById("formulario").addEventListener("submit", async function (e) {
       e.preventDefault();
 
       const articulo = inputArticulo.value.trim();
@@ -252,27 +258,28 @@
         alert("Completá todos los campos obligatorios.");
         return;
       }
-      let ref, accion;
+
+      let result;
       if (editandoId) {
-        ref = database.ref("inventario/" + editandoId);
-        accion = ref.set({
-          fecha: new Date().toISOString(),
-          tipo: tipo,
-          cod_art: cod_art,
-          articulo: articulo,
-          stock: stock,
-        });
+        result = await supa
+          .from('inventario')
+          .update({
+            fecha: new Date().toISOString(),
+            tipo, cod_art, articulo, stock
+          })
+          .eq('id', editandoId);
       } else {
-        ref = database.ref("inventario").push();
-        accion = ref.set({
-          fecha: new Date().toISOString(),
-          tipo: tipo,
-          cod_art: cod_art,
-          articulo: articulo,
-          stock: stock,
-        });
+        result = await supa
+          .from('inventario')
+          .insert([{
+            fecha: new Date().toISOString(),
+            tipo, cod_art, articulo, stock
+          }]);
       }
-      accion.then(() => {
+
+      if (result.error) {
+        alert("❌ Error al guardar: " + result.error.message);
+      } else {
         alert(editandoId ? "✅ Registro actualizado." : "✅ Producto guardado con éxito.");
         document.getElementById("formulario").reset();
         tipoCheck.checked = false;
@@ -280,11 +287,8 @@
         editandoId = null;
         guardarBtn.textContent = "Guardar";
         cargarTabla();
-      }).catch((error) => {
-        alert("❌ Error al guardar: " + error.message);
-      });
-      $('#articulo').prop('disabled', false); // Habilita el select después de guardar
-      // ...restablece el formulario y variables...
+      }
+      $('#articulo').prop('disabled', false);
       this.reset();
       $('#articulo').val('').trigger('change');
       inputCod.value = "";
@@ -292,31 +296,31 @@
       editandoId = null;
     });
 
-    // Elimina o comenta esta línea para que la tabla NO se cargue automáticamente
-    // window.addEventListener('DOMContentLoaded', () => {
-    //   cargarTabla();
-    // });
-
+    // ---- HISTORIAL (mostrar tabla) ----
     document.getElementById("historialBtn").addEventListener("click", function() {
-  document.getElementById("tabla-container").style.display = "block";
-  cargarTabla();
-});
+      document.getElementById("tabla-container").style.display = "block";
+      cargarTabla();
+    });
 
-    $(document).ready(function() {
-  $('#articulo').select2({
-    placeholder: "Seleccione artículo",
-    width: 'resolve'
-  });
-});
-document.getElementById("resetBtn").addEventListener("click", function() {
-  document.getElementById("formulario").reset();
-  $('#articulo').val('').trigger('change');
-  inputCod.value = "";
-  $('#articulo').prop('disabled', false);
-  guardarBtn.textContent = "Guardar";
-  editandoId = null;
-  actualizarTipoLabel();
-});
+    // ---- RESET ----
+    document.getElementById("resetBtn").addEventListener("click", function() {
+      document.getElementById("formulario").reset();
+      $('#articulo').val('').trigger('change');
+      inputCod.value = "";
+      $('#articulo').prop('disabled', false);
+      guardarBtn.textContent = "Guardar";
+      editandoId = null;
+      actualizarTipoLabel();
+    });
+
+    // ---- SELECT2 INIT ----
+    $(document).ready(async function() {
+      await cargarArticulos();
+      $('#articulo').select2({
+        placeholder: "Seleccione artículo",
+        width: 'resolve'
+      });
+    });
   </script>
 </body>
 </html>
